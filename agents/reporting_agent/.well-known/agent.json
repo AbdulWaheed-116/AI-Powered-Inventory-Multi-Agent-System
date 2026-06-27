@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "name": "reporting_agent",
+  "description": "Analyzes optimized inventory recommendations, calculates operational and financial supply chain KPIs, and generates business-oriented executive reports with risk and alert summaries.",
+  "capabilities": [
+    {
+      "name": "generate_report",
+      "description": "Process the inventory optimization agent outputs and produce a structured, high-level business report detailing KPIs, cost savings, capacity resolution, and inventory risks.",
+      "inputs": {
+        "data_path": {
+          "type": "string",
+          "description": "Path to the optimized inventory recommendations CSV file (e.g. data/processed/optimized_inventory.csv)",
+          "default": "data/processed/optimized_inventory.csv"
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Path to save the generated markdown report (e.g. data/processed/inventory_business_report.md)",
+          "default": "data/processed/inventory_business_report.md"
+        }
+      },
+      "outputs": {
+        "status": {
+          "type": "string",
+          "description": "Execution status (success or failed)"
+        },
+        "report_summary": {
+          "type": "object",
+          "description": "Summary metrics including total items, unique warehouses/products, financial stock values, and total savings."
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Path where the inventory business report is saved"
+        },
+        "error": {
+          "type": "string",
+          "description": "Error details, if failed"
+        }
+      }
+    }
+  ]
+}

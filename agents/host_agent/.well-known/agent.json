@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "name": "host_agent",
+  "description": "Orchestrates and coordinates the inventory optimization pipeline by chaining the Data Agent (for reading, cleaning, and preprocessing), the Forecasting Agent (for training and demand forecasting), and the Inventory Agent (for calculating safety stock, ROP, EOQ, and reorder status). Provides a central registry for Agent-to-Agent (A2A) communications.",
+  "capabilities": [
+    {
+      "name": "coordinate_pipeline",
+      "description": "Orchestrate data cleaning, demand forecasting, and inventory recommendations sequentially using sub-agents.",
+      "inputs": {
+        "raw_data_path": {
+          "type": "string",
+          "description": "Path to the raw messy input CSV (e.g. data/raw/pharma_supply_chain_messy_2.csv)",
+          "default": "data/raw/pharma_supply_chain_messy_2.csv"
+        },
+        "cleaned_data_path": {
+          "type": "string",
+          "description": "Path where the cleaned/imputed dataset should be stored (e.g. data/processed/cleaned_data.csv)",
+          "default": "data/processed/cleaned_data.csv"
+        },
+        "inventory_output_path": {
+          "type": "string",
+          "description": "Path where the optimization recommendations CSV should be stored (e.g. data/processed/inventory_recommendations.csv)",
+          "default": "data/processed/inventory_recommendations.csv"
+        },
+        "service_level_z": {
+          "type": "number",
+          "description": "Z-score for service level (default: 1.65 for 95% service level)",
+          "default": 1.65
+        }
+      },
+      "outputs": {
+        "status": {
+          "type": "string",
+          "description": "Execution status (success or failed)"
+        },
+        "data_agent_results": {
+          "type": "object",
+          "description": "Data cleaning outputs: row counts, duplicates removed, and missing values report."
+        },
+        "forecasting_agent_results": {
+          "type": "object",
+          "description": "Model metrics and prediction outputs from the forecasting agent."
+        },
+        "inventory_agent_results": {
+          "type": "object",
+          "description": "Inventory optimization outputs: alerts count, safety stock averages, and recommendations file path."
+        },
+        "error": {
+          "type": "string",
+          "description": "Details of any errors encountered during the execution"
+        }
+      }
+    }
+  ]
+}

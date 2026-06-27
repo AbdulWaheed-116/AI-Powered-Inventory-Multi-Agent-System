@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "name": "optimization_agent",
+  "description": "Optimizes order quantities and selects the best suppliers considering purchase, ordering, and holding costs, while strictly enforcing warehouse storage capacity constraints.",
+  "capabilities": [
+    {
+      "name": "optimize_inventory",
+      "description": "Optimize supplier selection and order quantities for items recommended for reorder, applying Lagrange-multiplier-based warehouse capacity adjustments.",
+      "inputs": {
+        "data_path": {
+          "type": "string",
+          "description": "Path to the inventory recommendations CSV file (e.g. data/processed/inventory_recommendations.csv)",
+          "default": "data/processed/inventory_recommendations.csv"
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Path to save optimized recommendations CSV (e.g. data/processed/optimized_inventory.csv)",
+          "default": "data/processed/optimized_inventory.csv"
+        },
+        "service_level_z": {
+          "type": "number",
+          "description": "Z-score for service level calculations (default 1.65)",
+          "default": 1.65
+        }
+      },
+      "outputs": {
+        "status": {
+          "type": "string",
+          "description": "Execution status (success or failed)"
+        },
+        "optimization_summary": {
+          "type": "object",
+          "description": "Summary metrics including total items optimized, total ordering costs, total capacity violations resolved, and cost savings."
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Path where the optimized recommendations CSV is saved"
+        },
+        "error": {
+          "type": "string",
+          "description": "Error details, if failed"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "name": "inventory_agent",
+  "description": "Calculates safety stock, reorder points, Economic Order Quantity (EOQ), and outputs optimization recommendations based on demand forecasts.",
+  "capabilities": [
+    {
+      "name": "calculate_inventory_recommendations",
+      "description": "Generate safety stock, reorder points, and recommended order quantities using demand forecasts.",
+      "inputs": {
+        "data_path": {
+          "type": "string",
+          "description": "Path to the cleaned inventory CSV file (e.g. data/processed/cleaned_data.csv)",
+          "default": "data/processed/cleaned_data.csv"
+        },
+        "predictions": {
+          "type": "array",
+          "description": "Optional demand forecasting prediction values corresponding to the rows of the cleaned data."
+        },
+        "service_level_z": {
+          "type": "number",
+          "description": "Z-score for service level (e.g. 1.28 for 90%, 1.65 for 95%, 2.33 for 99%)",
+          "default": 1.65
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Path to save inventory recommendations CSV (e.g. data/processed/inventory_recommendations.csv)",
+          "default": "data/processed/inventory_recommendations.csv"
+        }
+      },
+      "outputs": {
+        "status": {
+          "type": "string",
+          "description": "Execution status (success or failed)"
+        },
+        "inventory_summary": {
+          "type": "object",
+          "description": "Summary metrics including total items, reorder alerts count, average safety stock and ROP, and estimated costs."
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Path where the recommendations CSV is saved"
+        },
+        "error": {
+          "type": "string",
+          "description": "Error details, if failed"
+        }
+      }
+    }
+  ]
+}

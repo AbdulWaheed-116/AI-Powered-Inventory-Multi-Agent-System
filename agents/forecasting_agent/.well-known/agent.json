@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "name": "forecasting_agent",
+  "description": "Agent responsible for demand forecasting. Trains on cleaned inventory data and predicts future demand using a Random Forest model.",
+  "capabilities": [
+    {
+      "name": "forecast_demand",
+      "description": "Run the forecasting pipeline to train the model and output demand predictions.",
+      "inputs": {
+        "data_path": {
+          "type": "string",
+          "description": "Path to the processed/cleaned CSV file (e.g. data/processed/cleaned_data.csv)",
+          "default": "data/processed/cleaned_data.csv"
+        }
+      },
+      "outputs": {
+        "status": {
+          "type": "string",
+          "description": "Execution status (success or failed)"
+        },
+        "metrics": {
+          "type": "object",
+          "description": "Model performance metrics (MSE, RMSE, MAE, R2)"
+        },
+        "target_column": {
+          "type": "string",
+          "description": "Name of the target column predicted"
+        },
+        "predictions_summary": {
+          "type": "object",
+          "description": "Stats like mean, min, max, std, and total predicted demand"
+        },
+        "predictions": {
+          "type": "array",
+          "description": "List of predicted demand values corresponding to the input rows"
+        }
+      }
+    }
+  ]
+}
