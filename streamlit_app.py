@@ -1,3 +1,4 @@
+from test_gemini import response
 import os
 import json
 import datetime
@@ -6,11 +7,176 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
+import requests
+import logging
+import httpx
+from dotenv import load_dotenv
+from google import genai
+from google.genai import errors
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("GeminiAssistant")
+
+# Load environment variables from .env
+load_dotenv()
 
 # Import the existing agents
 from agents.host_agent.agent import HostAgent
 from agents.optimization_agent.agent import OptimizationAgent
 from agents.reporting_agent.agent import ReportingAgent
+
+def load_dotenv_key():
+    """
+    Retrieve GEMINI_API_KEY from environment variables (loaded via python-dotenv)
+    """
+    load_dotenv()
+    key = os.environ.get("GEMINI_API_KEY")
+    if key:
+        return key.strip()
+    return None
+
+def call_gemini(api_key, prompt):
+    """
+    Calls the Gemini API using the official Google GenAI SDK.
+    Handles invalid API keys, 404 model not found, 429 quota exceeded, network timeouts, and empty responses.
+    """
+   
+
+    # Validate that the API key exists before creating the client
+    if not api_key:
+        logger.error("Gemini API Key validation failed: API key is missing or empty.")
+        return "🔑 **Gemini API Key missing!** Please add your API key as a `GEMINI_API_KEY` environment variable or create a `.env` file in the project root containing `GEMINI_API_KEY=\"your_api_key_here\"`."
+    
+    try:
+        # Create client with timeout configured via http_options (30 seconds)
+        client = genai.Client(api_key=api_key, http_options={'timeout': 30000})
+        print("Calling Gemini...")
+        print("Prompt length:", len(prompt))
+        print("prompt",prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        
+        # Handle empty responses
+        if not response or not response.text or not response.text.strip():
+            logger.warning("Gemini API call succeeded but returned an empty response.")
+            return "⚠️ **Empty Response**: The AI assistant returned an empty response. Please try rephrasing your question."
+            
+        return response.text
+        
+    except errors.APIError as e:
+        logger.error(f"Google GenAI SDK API Error: Code={e.code}, Message={e.message}, Status={e.status}", exc_info=True)
+        if e.code == 429:
+            return "⚠️ **Quota Exceeded (429 Error)**: You have hit the rate limit for the Gemini API. Please wait a moment and try again."
+        elif e.code == 404:
+            return "❌ **Not Found (404 Error)**: The requested Gemini model or resource was not found. Please verify the model configuration."
+        elif e.code == 400 and ("API key not valid" in (e.message or "") or "API_KEY_INVALID" in str(e)):
+            return "🔑 **Invalid API Key**: The provided Gemini API key is invalid. Please check your `.env` file or environment variables."
+        else:
+            return f"❌ **Gemini API Error ({e.code})**: {e.message or str(e)}"
+            
+    except httpx.TimeoutException as e:
+        logger.error("Network timeout occurred during Gemini API call", exc_info=True)
+        return "⚠️ **Network Timeout**: The connection to the Gemini API timed out. Please check your internet connection or try again later."
+        
+    except Exception as e:
+        logger.error(f"Unexpected exception during Gemini API call: {str(e)}", exc_info=True)
+        return f"❌ **Unexpected Error**: {str(e)}"
+
+def get_assistant_prompt(user_question, df_context, metrics_context, report_context):
+    """
+    Constructs a concise, business-focused prompt for the AI Assistant.
+    Keeps the overall prompt length under ~3000 characters by omitting full CSV and business reports,
+    focusing only on key metrics, reorder alerts, savings, top 10 reorder products, and top 5 suppliers.
+    """
+    total_products = df_context["Product"].nunique() if "Product" in df_context.columns else 0
+    total_rows = len(df_context)
+    
+    reorder_alerts = 0
+    if "Recommendation_Status" in df_context.columns:
+        reorder_alerts = (df_context["Recommendation_Status"] == "REORDER").sum()
+        
+    original_cost = df_context["Reorder_Cost"].sum() if "Reorder_Cost" in df_context.columns else 0.0
+    optimized_cost = df_context["Optimized_Reorder_Cost"].sum() if "Optimized_Reorder_Cost" in df_context.columns else 0.0
+    cost_savings = max(0.0, original_cost - optimized_cost)
+    
+    # Get top 10 reorder products (Product, Recommendation_Status, Recommended_Order_Quantity)
+    if "Recommendation_Status" in df_context.columns and "Product" in df_context.columns:
+        reorder_df = df_context[df_context["Recommendation_Status"] == "REORDER"]
+        if not reorder_df.empty:
+            if "Recommended_Order_Quantity" in reorder_df.columns:
+                top_reorder = reorder_df.sort_values(by="Recommended_Order_Quantity", ascending=False).head(10)
+            else:
+                top_reorder = reorder_df.head(10)
+            
+            cols_reorder = [c for c in ["Product", "Recommendation_Status", "Recommended_Order_Quantity"] if c in top_reorder.columns]
+            top_reorder_str = top_reorder[cols_reorder].to_csv(index=False)
+        else:
+            top_reorder_str = "No products require reordering."
+    else:
+        top_reorder_str = "Reorder information not available."
+        
+    # Get top 5 optimized suppliers
+    if "Optimized_Supplier" in df_context.columns:
+        df_temp = df_context.copy()
+        if "Reorder_Cost" in df_temp.columns and "Optimized_Reorder_Cost" in df_temp.columns:
+            df_temp["Savings"] = df_temp["Reorder_Cost"] - df_temp["Optimized_Reorder_Cost"]
+            supplier_summary = df_temp.groupby("Optimized_Supplier").agg(
+                Times_Selected=("Optimized_Supplier", "count"),
+                Total_Savings_USD=("Savings", "sum")
+            ).reset_index()
+            top_suppliers = supplier_summary.sort_values(by="Total_Savings_USD", ascending=False).head(5)
+            top_suppliers["Total_Savings_USD"] = top_suppliers["Total_Savings_USD"].round(2)
+        else:
+            supplier_counts = df_context["Optimized_Supplier"].value_counts().head(5).reset_index()
+            supplier_counts.columns = ["Optimized_Supplier", "Times_Selected"]
+            top_suppliers = supplier_counts
+            
+        top_suppliers_str = top_suppliers.to_csv(index=False)
+    else:
+        top_suppliers_str = "Optimized supplier information not available."
+        
+    r2 = metrics_context.get("r2", 0.0)
+    rmse = metrics_context.get("rmse", 0.0)
+    mae = metrics_context.get("mae", 0.0)
+    mse = metrics_context.get("mse", 0.0)
+
+    prompt = f"""You are an AI Inventory Assistant. You help users understand their multi-agent inventory optimization results.
+Below is the context containing results from the optimization pipeline.
+
+--- 1. demand forecasting validation metrics ---
+R² Accuracy: {r2*100:.2f}%
+RMSE (Root Mean Squared Error): {rmse:.2f}
+MAE (Mean Absolute Error): {mae:.2f}
+MSE (Mean Squared Error): {mse:.2f}
+
+--- 2. overall summary statistics ---
+Total unique products: {total_products}
+Total records processed: {total_rows}
+Reorder Alerts: {reorder_alerts}
+Total Sourcing Cost Savings: ${cost_savings:,.2f}
+
+--- 3. top 10 reorder products ---
+{top_reorder_str}
+
+--- 4. top 5 optimized suppliers ---
+{top_suppliers_str}
+
+--- INSTRUCTIONS ---
+- Answer the user's question clearly and concisely based ONLY on the provided context.
+- Do NOT make assumptions, create or modify any data, or hallucinate results.
+- If the information is not available in the context, state that you cannot answer based on current pipeline results.
+- Keep answers professional, data-driven, and business-focused.
+
+User's Question: {user_question}
+Assistant Answer:"""
+    return prompt
+
 
 # Page configuration
 st.set_page_config(
@@ -149,39 +315,124 @@ st.sidebar.header("Pipeline Controls")
 uploaded_file = st.sidebar.file_uploader("Upload Inventory CSV File", type=["csv"])
 
 pipeline_triggered = False
+schema_valid = False
 
 if uploaded_file is not None:
-    st.sidebar.success("File uploaded successfully!")
     raw_path = os.path.join(RAW_DIR, uploaded_file.name)
     
-    # Save the file bytes
-    with open(raw_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    try:
+        # Read the uploaded CSV to validate columns
+        uploaded_file.seek(0)
+        df_uploaded = pd.read_csv(uploaded_file)
+        
+        # 1. Convert column names to expected format using normalization (lowercase, remove spaces & underscores)
+        column_mapping = {
+            "date": "Date",
+            "product": "Product",
+            "productname": "Product",
+            "itemname": "Product",
+            "category": "Category",
+            "demand": "Demand",
+            "price": "Price",
+            "cost": "Cost",
+            "warehouse": "Warehouse",
+            "warehousename": "Warehouse",
+            "supplier": "Supplier",
+            "suppliername": "Supplier",
+            "leadtime": "Lead_Time",
+            "leadtimedays": "Lead_Time",
+            "holdingcost": "Holding_Cost",
+            "transportationcost": "Transportation_Cost",
+            "storagecapacity": "Storage_Capacity",
+            "storagecapacityunits": "Storage_Capacity",
+            "currentstock": "Inventory_Level",
+            "stock": "Inventory_Level",
+            "inventorylevel": "Inventory_Level"
+        }
+        
+        rename_map = {}
+        for col in df_uploaded.columns:
+            # Normalize column name: lowercase and remove spaces and underscores
+            normalized_col = col.lower().replace(" ", "").replace("_", "")
+            if normalized_col in column_mapping:
+                rename_map[col] = column_mapping[normalized_col]
+                
+        df_uploaded = df_uploaded.rename(columns=rename_map)
+        
+        # 2. Check and handle derived columns if missing
+        warnings = []
+        if "Holding_Cost" not in df_uploaded.columns:
+            if "Cost" in df_uploaded.columns:
+                df_uploaded["Holding_Cost"] = (df_uploaded["Cost"].fillna(0.0) * 0.10).round(2)
+                df_uploaded.loc[df_uploaded["Holding_Cost"] <= 0, "Holding_Cost"] = 5.0
+            else:
+                df_uploaded["Holding_Cost"] = 5.0
+            warnings.append("⚠️ `Holding_Cost` column was missing and has been auto-created (calculated as 10% of Cost or default 5.0).")
+            
+        if "Transportation_Cost" not in df_uploaded.columns:
+            if "Cost" in df_uploaded.columns:
+                df_uploaded["Transportation_Cost"] = (df_uploaded["Cost"].fillna(0.0) * 0.50).round(2)
+                df_uploaded.loc[df_uploaded["Transportation_Cost"] <= 0, "Transportation_Cost"] = 50.0
+            else:
+                df_uploaded["Transportation_Cost"] = 50.0
+            warnings.append("⚠️ `Transportation_Cost` column was missing and has been auto-created (calculated as 50% of Cost or default 50.0).")
+        
+        # 3. Check for required columns
+        required_cols = [
+            "Date", "Product", "Category", "Demand", "Price", "Cost", "Warehouse",
+            "Supplier", "Lead_Time", "Holding_Cost", "Transportation_Cost", "Storage_Capacity", "Inventory_Level"
+        ]
+        
+        missing_cols = [col for col in required_cols if col not in df_uploaded.columns]
+        
+        if missing_cols:
+            st.sidebar.error(
+                "🚨 **Schema Validation Error**\n\n"
+                "The uploaded CSV is missing the following required columns:\n"
+                + "\n".join([f"- `{col}`" for col in missing_cols])
+            )
+            schema_valid = False
+        else:
+            st.sidebar.success("✅ CSV Schema validated successfully!")
+            schema_valid = True
+            
+            # Show warnings when columns are auto-created
+            if warnings:
+                for warning in warnings:
+                    st.sidebar.warning(warning)
+            
+            # Save the validated, formatted CSV file
+            df_uploaded.to_csv(raw_path, index=False)
+            
+    except Exception as e:
+        st.sidebar.error(f"🚨 **File Error**: Failed to process CSV: {str(e)}")
+        schema_valid = False
 
-    if st.sidebar.button("Run Multi-Agent Optimization Pipeline", type="primary"):
-        with st.status("Executing Multi-Agent Supply Chain Pipeline...", expanded=True) as status:
-            try:
-                status.update(label="1. Invoking Host Agent (Data Cleaning, Forecast Training & Stock Targets)...")
-                st.write("🔧 Cleaning dataset, imputing missing values...")
-                st.write("📈 Training Random Forest Regressor & predicting demand...")
-                st.write("📐 Calculating Safety Stock, ROP, and EOQ limits...")
-                
-                # We execute
-                opt_res, rep_res, metrics_cache = run_complete_pipeline(raw_path)
-                
-                status.update(label="2. Invoking Optimization Agent (Supplier Selection & Warehouse Limits)...")
-                st.write("🤝 Sourcing cheapest suppliers based on transportation and lead time costs...")
-                st.write("🏢 Enforcing physical storage constraints via Lagrangian multiplier search...")
-                
-                status.update(label="3. Invoking Reporting Agent (KPI Aggregations & Markdown Report)...")
-                st.write("📊 Compiling dashboard metrics and writing executive report...")
-                
-                status.update(label="AI Pipeline executed successfully!", state="complete")
-                st.success("Optimization completed! Dashboard visuals have been refreshed.")
-                pipeline_triggered = True
-            except Exception as e:
-                status.update(label="Pipeline execution failed!", state="error")
-                st.error(f"Error during agent coordination: {str(e)}")
+    if st.sidebar.button("Run Multi-Agent Optimization Pipeline", type="primary", disabled=not schema_valid):
+        if schema_valid:
+            with st.status("Executing Multi-Agent Supply Chain Pipeline...", expanded=True) as status:
+                try:
+                    status.update(label="1. Invoking Host Agent (Data Cleaning, Forecast Training & Stock Targets)...")
+                    st.write("🔧 Cleaning dataset, imputing missing values...")
+                    st.write("📈 Training Random Forest Regressor & predicting demand...")
+                    st.write("📐 Calculating Safety Stock, ROP, and EOQ limits...")
+                    
+                    # We execute
+                    opt_res, rep_res, metrics_cache = run_complete_pipeline(raw_path)
+                    
+                    status.update(label="2. Invoking Optimization Agent (Supplier Selection & Warehouse Limits)...")
+                    st.write("🤝 Sourcing cheapest suppliers based on transportation and lead time costs...")
+                    st.write("🏢 Enforcing physical storage constraints via Lagrangian warehouse capacity caps...")
+                    
+                    status.update(label="3. Invoking Reporting Agent (KPI Aggregations & Markdown Report)...")
+                    st.write("📊 Compiling dashboard metrics and writing executive report...")
+                    
+                    status.update(label="AI Pipeline executed successfully!", state="complete")
+                    st.success("Optimization completed! Dashboard visuals have been refreshed.")
+                    pipeline_triggered = True
+                except Exception as e:
+                    status.update(label="Pipeline execution failed!", state="error")
+                    st.error(f"Error during agent coordination: {str(e)}")
 
 # Load data and metrics for display
 data_loaded = False
@@ -260,11 +511,12 @@ with kpi_cols[6]:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # Main Navigation Tabs
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📈 Demand Forecasting", 
     "📦 Inventory Recommendations", 
     "💰 Cost Sourcing & Capacity Optimization", 
-    "📄 Executive Business Report"
+    "📄 Executive Business Report",
+    "💬 AI Inventory Assistant"
 ])
 
 # ----------------- TAB 1: DEMAND FORECASTING -----------------
@@ -522,3 +774,59 @@ with tab4:
             if content_str:
                 with st.expander(sec_name, expanded=(sec_name in ["1. Executive Summary", "4. Risk & Operational Alerts"])):
                     st.markdown(content_str)
+
+# ----------------- TAB 5: AI INVENTORY ASSISTANT -----------------
+with tab5:
+    st.markdown('<div class="section-header">💬 AI Inventory Assistant</div>', unsafe_allow_html=True)
+    st.markdown(
+        "Ask natural language questions about your forecasting accuracy, replenishment recommendations, "
+        "supplier selection, cost savings, or physical warehouse capacity constraints."
+    )
+    
+    # Reset chat if a new CSV was uploaded
+    if uploaded_file is not None:
+        if "last_uploaded_filename" not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file.name:
+            st.session_state.last_uploaded_filename = uploaded_file.name
+            st.session_state.chat_messages = []
+            
+    # 1. Retrieve API key
+    gemini_key = load_dotenv_key()
+    
+    if not gemini_key:
+        st.warning(
+            "🔑 **Gemini API Key missing!** Please add your API key as a `GEMINI_API_KEY` environment variable "
+            "or create a `.env` file in the project root containing:\n"
+            "```env\n"
+            "GEMINI_API_KEY=\"your_api_key_here\"\n"
+            "```"
+        )
+    else:
+        # Initialize chat history
+        if "chat_messages" not in st.session_state:
+            st.session_state.chat_messages = []
+            
+        # Display chat message history
+        for message in st.session_state.chat_messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                
+        # Handle new user input
+        if user_prompt := st.chat_input("Ask a question about the results (e.g., 'Which products need reorder?')..."):
+            # Display user message
+            with st.chat_message("user"):
+                st.markdown(user_prompt)
+            st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
+            
+            # Generate response from Gemini
+            with st.chat_message("assistant"):
+                with st.spinner("Analyzing inventory results..."):
+                    context_prompt = get_assistant_prompt(user_prompt, df, metrics, report_content)
+                    response_text = call_gemini(gemini_key, context_prompt)
+                    st.markdown(response_text)
+                    # response_text = call_gemini(
+                    #     gemini_key, 
+                    #     "Reply only: Streamlit integration is working."
+                    # )
+                    # st.markdown(response_text)
+                    
+            st.session_state.chat_messages.append({"role": "assistant", "content": response_text})

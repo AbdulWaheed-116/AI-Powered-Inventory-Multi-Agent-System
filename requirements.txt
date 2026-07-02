@@ -5,3 +5,5 @@ seaborn
 scikit-learn 
 jupyter
 streamlit
+google-genai
+python-dotenv

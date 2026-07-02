@@ -164,13 +164,13 @@ class OptimizationAgent:
         """
         Chooses the cheapest supplier based on purchase, ordering, and lead-time safety stock holding costs.
         """
-        # Create columns for optimized values
-        df["Optimized_Supplier"] = df["Supplier"]
-        df["Optimized_Lead_Time"] = df["Lead_Time"]
-        df["Optimized_Safety_Stock"] = df["Safety_Stock"]
-        df["Optimized_Reorder_Point"] = df["Reorder_Point"]
-        df["Optimized_Cost"] = df["Cost"]
-        df["Optimized_Transportation_Cost"] = df["Transportation_Cost"]
+        # Create columns for optimized values and explicitly cast to avoid pandas int64 dtype errors on float assignments
+        df["Optimized_Supplier"] = df["Supplier"].astype(str)
+        df["Optimized_Lead_Time"] = df["Lead_Time"].astype(float)
+        df["Optimized_Safety_Stock"] = df["Safety_Stock"].astype(float)
+        df["Optimized_Reorder_Point"] = df["Reorder_Point"].astype(float)
+        df["Optimized_Cost"] = df["Cost"].astype(float)
+        df["Optimized_Transportation_Cost"] = df["Transportation_Cost"].astype(float)
         df["Optimized_Order_Quantity"] = 0
         df["Optimized_Unconstrained_EOQ"] = 0
 
