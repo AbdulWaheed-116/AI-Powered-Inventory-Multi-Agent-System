@@ -1,4 +1,4 @@
-from test_gemini import response
+
 import os
 import json
 import datetime
@@ -87,6 +87,71 @@ def call_gemini(api_key, prompt):
     except Exception as e:
         logger.error(f"Unexpected exception during Gemini API call: {str(e)}", exc_info=True)
         return f"❌ **Unexpected Error**: {str(e)}"
+
+import asyncio
+import concurrent.futures
+
+def run_async_in_thread(coro):
+    """
+    Executes an asynchronous coroutine in a separate worker thread.
+    This prevents 'This event loop is already running' errors in Streamlit.
+    """
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+async def call_adk_root_agent(prompt: str, session_id: str, raw_data_path: str = None) -> str:
+    """
+    Calls the ADK Root Agent using the official InMemoryRunner API.
+    Collects and returns all generated response text chunks.
+    """
+    from google.adk.runners import InMemoryRunner
+    from google.genai import types
+    from adk.root_agent import root_agent
+    
+    runner = InMemoryRunner(agent=root_agent)
+    runner.auto_create_session = True
+    
+    user_id = "streamlit_user"
+    # Pre-create session to avoid SessionNotFoundError
+    session = await runner.session_service.get_session(
+        app_name=runner.app_name,
+        user_id=user_id,
+        session_id=session_id
+    )
+    if not session:
+        await runner.session_service.create_session(
+            app_name=runner.app_name,
+            user_id=user_id,
+            session_id=session_id
+        )
+        
+    # Construct UserContent as expected by ADK v2.3.0
+    new_message = types.UserContent(
+        parts=[types.Part(text=prompt)]
+    )
+    
+    # Construct state delta for dynamic raw file path
+    state_delta = None
+    if raw_data_path:
+        state_delta = {"raw_data_path": raw_data_path}
+    
+    text_chunks = []
+    async for event in runner.run_async(
+        user_id=user_id,
+        session_id=session_id,
+        new_message=new_message,
+        state_delta=state_delta
+    ):
+        if event.content and event.content.parts:
+            for part in event.content.parts:
+                if part.text:
+                    text_chunks.append(part.text)
+                    
+    if not text_chunks:
+        return "⚠️ No response text was returned by the Root Agent."
+        
+    return "".join(text_chunks)
 
 def get_assistant_prompt(user_question, df_context, metrics_context, report_context):
     """
@@ -788,6 +853,7 @@ with tab5:
         if "last_uploaded_filename" not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file.name:
             st.session_state.last_uploaded_filename = uploaded_file.name
             st.session_state.chat_messages = []
+            st.session_state.adk_session_id = f"streamlit_session_{int(datetime.datetime.now().timestamp())}"
             
     # 1. Retrieve API key
     gemini_key = load_dotenv_key()
@@ -801,6 +867,10 @@ with tab5:
             "```"
         )
     else:
+        # Initialize ADK session ID
+        if "adk_session_id" not in st.session_state:
+            st.session_state.adk_session_id = f"streamlit_session_{int(datetime.datetime.now().timestamp())}"
+
         # Initialize chat history
         if "chat_messages" not in st.session_state:
             st.session_state.chat_messages = []
@@ -817,16 +887,17 @@ with tab5:
                 st.markdown(user_prompt)
             st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
             
-            # Generate response from Gemini
+            # Generate response from the ADK Root Agent
             with st.chat_message("assistant"):
                 with st.spinner("Analyzing inventory results..."):
-                    context_prompt = get_assistant_prompt(user_prompt, df, metrics, report_content)
-                    response_text = call_gemini(gemini_key, context_prompt)
+                    try:
+                        session_id = st.session_state.adk_session_id
+                        raw_data_path = None
+                        if uploaded_file is not None:
+                            raw_data_path = os.path.join(RAW_DIR, uploaded_file.name)
+                        response_text = run_async_in_thread(call_adk_root_agent(user_prompt, session_id, raw_data_path))
+                    except Exception as e:
+                        response_text = f"❌ **ADK Runner Error**: Failed to run Root Agent. Details: {str(e)}"
                     st.markdown(response_text)
-                    # response_text = call_gemini(
-                    #     gemini_key, 
-                    #     "Reply only: Streamlit integration is working."
-                    # )
-                    # st.markdown(response_text)
                     
             st.session_state.chat_messages.append({"role": "assistant", "content": response_text})
