@@ -79,12 +79,24 @@ async def run_query(
     print(f"\n>>> Query: {query}")
     print("-" * 60)
     
-    async for event in runner.run_async(
-        user_id=user_id,
-        session_id=session_id,
-        new_message=new_message
-    ):
-        print_event(event, verbose=verbose)
+    try:
+        async for event in runner.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=new_message
+        ):
+            print_event(event, verbose=verbose)
+    except Exception as e:
+        err_msg = str(e)
+        if any(kw in err_msg for kw in ["429", "RESOURCE_EXHAUSTED", "Quota exceeded", "ResourceExhausted"]):
+            print("\n[WARNING] Gemini API Quota Exceeded (429 RESOURCE_EXHAUSTED)")
+            print("Your API key has exceeded its free tier rate limits or daily quota.")
+            print("Mitigations:")
+            print("1. Wait 10-30 seconds if it is a transient rate limit.")
+            print("2. Upgrade your API key to pay-as-you-go on Google AI Studio (https://aistudio.google.com/).")
+            print(f"Details:\n{err_msg}\n")
+        else:
+            print(f"\nError: {err_msg}")
         
     print("-" * 60)
 
@@ -146,7 +158,16 @@ async def interactive_cli() -> None:
             print("\nExiting...")
             break
         except Exception as e:
-            print(f"\nError: {str(e)}")
+            err_msg = str(e)
+            if any(kw in err_msg for kw in ["429", "RESOURCE_EXHAUSTED", "Quota exceeded", "ResourceExhausted"]):
+                print("\n[WARNING] Gemini API Quota Exceeded (429 RESOURCE_EXHAUSTED)")
+                print("Your API key has exceeded its free tier rate limits or daily quota.")
+                print("Mitigations:")
+                print("1. Wait 10-30 seconds if it is a transient rate limit.")
+                print("2. Upgrade your API key to pay-as-you-go on Google AI Studio (https://aistudio.google.com/).")
+                print(f"Details:\n{err_msg}\n")
+            else:
+                print(f"\nError: {err_msg}")
 
 
 if __name__ == "__main__":

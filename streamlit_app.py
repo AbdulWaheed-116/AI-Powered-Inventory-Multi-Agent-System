@@ -897,7 +897,22 @@ with tab5:
                             raw_data_path = os.path.join(RAW_DIR, uploaded_file.name)
                         response_text = run_async_in_thread(call_adk_root_agent(user_prompt, session_id, raw_data_path))
                     except Exception as e:
-                        response_text = f"❌ **ADK Runner Error**: Failed to run Root Agent. Details: {str(e)}"
+                        err_msg = str(e)
+                        if any(kw in err_msg for kw in ["429", "RESOURCE_EXHAUSTED", "Quota exceeded", "ResourceExhausted"]):
+                            response_text = (
+                                "⚠️ **Gemini API Quota Exceeded (429 RESOURCE_EXHAUSTED)**\n\n"
+                                "Your Gemini API Key has exceeded its rate limit (RPM) or daily request quota (RPD).\n\n"
+                                "**How to resolve this:**\n"
+                                "1. **Wait a few seconds**: If it's a transient rate limit, waiting 10-30 seconds before asking again will resolve it.\n"
+                                "2. **Daily Quota Limit**: If you are using the free tier, you may have reached the daily quota (e.g. 20 requests per day for `gemini-2.5-flash`).\n"
+                                "3. **Check/Upgrade API Key**: Ensure you are using the correct API key in your `.env` file. You can upgrade to a pay-as-you-go key on [Google AI Studio](https://aistudio.google.com/) to increase rate limits and remove daily caps.\n\n"
+                                f"**Error Details:**\n"
+                                "```\n"
+                                f"{err_msg.strip()}\n"
+                                "```"
+                            )
+                        else:
+                            response_text = f"❌ **ADK Runner Error**: Failed to run Root Agent. Details: {err_msg}"
                     st.markdown(response_text)
                     
             st.session_state.chat_messages.append({"role": "assistant", "content": response_text})
