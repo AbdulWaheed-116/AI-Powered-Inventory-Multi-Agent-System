@@ -8,4 +8,7 @@ streamlit
 google-genai
 python-dotenv
 google-adk
+plotly
+mcp
+
 
