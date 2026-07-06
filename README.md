@@ -233,7 +233,7 @@ The Forecasting Agent trains a Random Forest Regressor to model demands. It eval
 
 1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/AbdulWaheed-116/AI-Powered-Inventory-Multi-Agent-System.git
    cd Agentic-Inventory-Optimization-System
    ```
 
