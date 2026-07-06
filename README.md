@@ -229,6 +229,42 @@ The Forecasting Agent trains a Random Forest Regressor to model demands. It eval
 
 ---
 
+## 📂 Project Structure
+
+```text
+Agentic-Inventory-Optimization-System/
+├── adk/                         # Google ADK agent configuration and orchestration
+│   ├── root_agent.py            # Orchestrator agent definitions and tools mapping
+│   └── runner.py                # InMemoryRunner execution wrappers
+├── agents/                      # Specialized pipeline agents
+│   ├── data_agent/              # Cleans datasets, handles missing values & duplicates
+│   ├── forecasting_agent/       # Trains regression models to predict demands
+│   ├── host_agent/              # Sequences agent executions (A2A registry orchestration)
+│   ├── inventory_agent/         # Calculates safety stocks, ROP, and EOQ thresholds
+│   ├── optimization_agent/      # Enforces capacity boundaries and selects suppliers
+│   └── reporting_agent/         # Computes network KPIs and generates Markdown summaries
+├── assets/                      # Media assets and dashboard screenshots
+│   ├── dashboard_main.png
+│   ├── executive_report.png
+│   └── ide_screenshot.png
+├── common/                      # Common utilities and networking clients
+├── data/                        # Project databases and outputs
+│   ├── raw/                     # Original uploaded supply chain CSV logs
+│   └── processed/               # Cleaned data, recommendations, metrics, and reports
+├── mcp_server/                  # Model Context Protocol (MCP) tool server
+│   ├── server.py                # Server entry point utilizing FastMCP
+│   └── tools.py                 # Underlying pipeline functions exposed as tools
+├── models/                      # Machine Learning regression scripts
+├── notebooks/                   # Jupyter notebooks for data analysis & modeling tests
+├── .env                         # Local environment configuration keys (API Keys)
+├── .gitignore                   # Files and directories ignored by Git version control
+├── README.md                    # Project documentation
+├── requirements.txt             # Required Python package list
+└── streamlit_app.py             # Streamlit application dashboard & chatbot UI
+```
+
+---
+
 ## 🚀 Installation & Setup
 
 1. **Clone the repository:**
