@@ -270,7 +270,7 @@ Agentic-Inventory-Optimization-System/
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/AbdulWaheed-116/AI-Powered-Inventory-Multi-Agent-System.git
-   cd Agentic-Inventory-Optimization-System
+   cd AI-Powered-Inventory-Multi-Agent-System
    ```
 
 2. **Create and activate a virtual environment:**
