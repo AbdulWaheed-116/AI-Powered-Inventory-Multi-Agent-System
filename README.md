@@ -1,6 +1,7 @@
 # 🤖 AI-Powered Inventory Optimization System
 
-An enterprise-grade AI-powered inventory optimization platform developed as part of the **Google Kaggle AI Agents Intensive Capstone Project**. The solution integrates **Google ADK Multi-Agent Systems, Model Context Protocol (MCP), Machine Learning, and Streamlit** to intelligently automate inventory planning, demand forecasting, supplier optimization, warehouse capacity analysis, and business reporting through an AI-driven orchestration workflow.
+Enterprise-grade Inventory Optimization AI Agent Capstone Project
+An enterprise-grade AI-powered inventory optimization platform, which is developed as a part of the Google Kaggle AI Agents Intensive Capstone Project. The solution employs Google ADK Multi-Agent Systems, Model Context Protocol (MCP), Machine Learning, and Streamlit to design an AI-driven orchestrator that automates inventory planning, demand forecasting, supplier optimization, warehouse capacity analysis, and business reporting.
 
 ## 📌 Project Overview
 
@@ -34,7 +35,7 @@ The system:
 ---
 
 ## 📌 Problem Statement
-Inventory management is a critical challenge for retail, pharmaceutical, and supply chain businesses. Organizations often face issues such as inaccurate demand forecasting, overstocking, stockouts, inefficient supplier selection, and limited visibility into warehouse capacity. These challenges increase operational costs, reduce customer satisfaction, and make decision-making heavily dependent on manual analysis. Businesses need an intelligent system that can automate inventory analysis, forecast demand, optimize replenishment decisions, and provide actionable insights in real time.
+Inventory management is a challenge for many retail, pharmaceutical, and supply chain companies. The problems include demand forecasting, overstocking, stockouts, supplier selection, and warehouse capacity. These issues add up and create significant expenses for the companies while clogging the supply chains. Customers suffer from poor inventory management too. Poor inventory management practices make it hard to make the right choices. A company needs a smart inventory system that can control these problems by analyzing the available data and coming up with viable solutions and recommendations.
 
 ### 🎯 Objectives
 * Automate inventory analysis and formatting.
